@@ -9,8 +9,8 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
-@Autonomous(name = "BasicOmniLin", group = "Testing")
-public class BasicOmniLin extends OpMode {
+@Autonomous(name = "BlueAutonomous", group = "Autonomous")
+public class BlueAutonomous extends OpMode {
     public static class Paths {
         public PathChain Shoot1;
         public PathChain ArtifactSetup1;
