@@ -135,7 +135,7 @@ public class BlueAutonomous extends OpMode {
         switch (pathState) {
             case 0:
                 setLeftIntakeState(false);
-                shoot();
+                shootAll();
 
                 if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
                     follower.followPath(paths.ArtifactSetup1, true);
@@ -163,6 +163,7 @@ public class BlueAutonomous extends OpMode {
                     follower.followPath(paths.TravelToShoot1, true);
                     setPathState(3);
                 }
+                ballCount = 3;
                 break;
             case 3:
                 spinupFlywheel();
@@ -174,7 +175,7 @@ public class BlueAutonomous extends OpMode {
             case 4:
                 // SHOOT 2 - robot at (48, 96)
                 setLeftIntakeState(false);
-                shoot();
+                shootAll();
 
                 if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
                     follower.followPath(paths.ArtifactSetup2, true);
@@ -202,6 +203,7 @@ public class BlueAutonomous extends OpMode {
                     follower.followPath(paths.TravelToShoot2, true);
                     setPathState(7);
                 }
+                ballCount = 3;
                 break;
             case 7:
                 spinupFlywheel();
@@ -213,7 +215,7 @@ public class BlueAutonomous extends OpMode {
             case 8:
                 // === SHOOT 3 - robot at (48, 96) ===
                 setLeftIntakeState(false);
-                shoot();
+                shootAll();
 
                 if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
                     follower.followPath(paths.ArtifactSetup3, true);
@@ -240,6 +242,7 @@ public class BlueAutonomous extends OpMode {
                     follower.followPath(paths.TravelToShoot3, true);
                     setPathState(11);
                 }
+                ballCount = 3;
                 break;
             case 11:
                 spinupFlywheel();
@@ -251,7 +254,7 @@ public class BlueAutonomous extends OpMode {
             case 12:
                 // === SHOOT 4 (final shot before park) - robot at (48, 96) ===
                 setLeftIntakeState(false);
-                shoot();
+                shootAll();
 
                 if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
                     follower.followPath(paths.Park, true);
@@ -286,8 +289,8 @@ public class BlueAutonomous extends OpMode {
         intakeLeft = hardwareMap.get(DcMotor.class, "intake_left");
         // intakeRight = hardwareMap.get(DcMotor.class, "intake_right"); // not used in this autonomous mode
 
-        flywheelLeft = hardwareMap.get(DcMotorEx.class, "flywheel_left");
-        flywheelRight = hardwareMap.get(DcMotorEx.class, "flywheel_right");
+        flywheelLeft = hardwareMap.get(DcMotorEx.class, "left_flywheel");
+        flywheelRight = hardwareMap.get(DcMotorEx.class, "right_flywheel");
 
         paths = new Paths(follower);
     }
@@ -354,5 +357,12 @@ public class BlueAutonomous extends OpMode {
         // TODO: Wait for spin up and activate servo to push ball into flywheel
 
         ballCount -= 1;
+    }
+
+    // TODO: Needs to delay between shots
+    private void shootAll() {
+        while (ballCount > 0) {
+            shoot();
+        }
     }
 }
