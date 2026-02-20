@@ -10,8 +10,35 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Autonomous(name = "BlueAutonomous", group = "Autonomous")
 public class BlueAutonomous extends OpMode {
+
+    // Step callback interface
+
+    /**
+     * A single autonomous step: run onEnter() once, then tick isDone() each loop.
+     */
+    private interface Step {
+        /**
+         * Called exactly once when this step becomes active.
+         */
+        void onEnter();
+
+        /**
+         * Called every loop while this step is active. Return true to advance.
+         */
+        boolean isDone();
+
+        /**
+         * Human-readable label shown in telemetry.
+         */
+        String label();
+    }
+
+    // Paths (export from visualizer)
     public static class Paths {
         public PathChain Shoot1;
         public PathChain ArtifactSetup1;
@@ -103,10 +130,7 @@ public class BlueAutonomous extends OpMode {
 
     private Follower follower;
     private Timer pathTimer, opmodeTimer;
-
     private Paths paths;
-
-    private int pathState;
 
     private DcMotor intakeLeft;
     // private DcMotor intakeRight; // not used in this autonomous mode
@@ -117,165 +141,163 @@ public class BlueAutonomous extends OpMode {
     // How long to wait at the shooting position before moving on
     private static final double SHOOT_WAIT_MS = 2000;
 
-    // Reduced drive speed used during ArtifactPickup paths so the intake balls correctly
+    // Reduced drive speed used during ArtifactPickup paths so the intake sweeps balls correctly
     private static final double INTAKE_SWEEP_SPEED = 0.45;
     private static final double FULL_SPEED = 1.0;
 
-
-    // NOTE: A is used for if there are 3 balls and to shoot the first one
-    // B is used for every other ball (if there are currently 2 balls or less
-    // in the intake.)
+    // NOTE: A is used when there are 3 balls / first shot; B for 2 or fewer balls
     // TODO: Switch this to velocity
     private static final double FLYWHEEL_TARGET_POWER_A = 0.8;
     private static final double FLYWHEEL_TARGET_VELOCITY_B = 1200.0;
 
     private int ballCount = 3;
 
-    public void autonomousPathUpdate() {
-        switch (pathState) {
-            case 0:
-                setLeftIntakeState(false);
-                shootAll();
+    // Step-sequencer state
+    private List<Step> sequence;
+    private int currentStep;
+    private boolean stepEntered;
 
-                if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
-                    follower.followPath(paths.ArtifactSetup1, true);
-                    setPathState(1);
-                }
-
-                break;
-            case 1:
-                // ArtifactSetup - approaching row 1; turn on intake motors
-                shutdownFlywheel();
-                setLeftIntakeState(true);
-
-                if (!follower.isBusy()) {
-                    // Slow down so the intake can sweep the balls in as we slide left
-                    follower.setMaxPower(INTAKE_SWEEP_SPEED);
-                    follower.followPath(paths.ArtifactPickup1, true);
-                    setPathState(2);
-                }
-                break;
-            case 2:
-                // ArtifactPickup - slowly sweeping balls into intake while sliding left
-                if (!follower.isBusy()) {
-                    // Restore full speed for the return trip
-                    follower.setMaxPower(FULL_SPEED);
-                    follower.followPath(paths.TravelToShoot1, true);
-                    setPathState(3);
-                }
-                ballCount = 3;
-                break;
-            case 3:
-                spinupFlywheel();
-                // Travel back to shoot position
-                if (!follower.isBusy()) {
-                    setPathState(4);
-                }
-                break;
-            case 4:
-                // SHOOT 2 - robot at (48, 96)
-                setLeftIntakeState(false);
-                shootAll();
-
-                if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
-                    follower.followPath(paths.ArtifactSetup2, true);
-                    setPathState(5);
-                }
-                break;
-            case 5:
-                // ArtifactSetup - approaching row 2; turn on intake motors
-                shutdownFlywheel();
-                setLeftIntakeState(true);
-
-                if (!follower.isBusy()) {
-                    // Slow down so the intake can sweep the balls in as we slide left
-                    follower.setMaxPower(INTAKE_SWEEP_SPEED);
-                    follower.followPath(paths.ArtifactPickup2, true);
-                    setPathState(6);
-                }
-                break;
-            case 6:
-                // ArtifactPickup - slowly sweeping balls into intake while sliding left
-                // intakeRight.setPower(1); // not used in this autonomous mode
-                if (!follower.isBusy()) {
-                    // Restore full speed for the return trip
-                    follower.setMaxPower(FULL_SPEED);
-                    follower.followPath(paths.TravelToShoot2, true);
-                    setPathState(7);
-                }
-                ballCount = 3;
-                break;
-            case 7:
-                spinupFlywheel();
-                // Travel back to shoot position
-                if (!follower.isBusy()) {
-                    setPathState(8);
-                }
-                break;
-            case 8:
-                // === SHOOT 3 - robot at (48, 96) ===
-                setLeftIntakeState(false);
-                shootAll();
-
-                if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
-                    follower.followPath(paths.ArtifactSetup3, true);
-                    setPathState(9);
-                }
-                break;
-            case 9:
-                // ArtifactSetup - approaching row 3; turn on intake motors
-                setLeftIntakeState(true);
-                // intakeRight.setPower(1); // not used in this autonomous mode
-                if (!follower.isBusy()) {
-                    // Slow down so the intake can sweep the balls in as we slide left
-                    follower.setMaxPower(INTAKE_SWEEP_SPEED);
-                    follower.followPath(paths.ArtifactPickup3, true);
-                    setPathState(10);
-                }
-                break;
-            case 10:
-                // ArtifactPickup - slowly sweeping balls into intake while sliding left
-                // intakeRight.setPower(1); // not used in this autonomous mode
-                if (!follower.isBusy()) {
-                    // Restore full speed for the return trip
-                    follower.setMaxPower(FULL_SPEED);
-                    follower.followPath(paths.TravelToShoot3, true);
-                    setPathState(11);
-                }
-                ballCount = 3;
-                break;
-            case 11:
-                spinupFlywheel();
-                // Travel back to shoot position
-                if (!follower.isBusy()) {
-                    setPathState(12);
-                }
-                break;
-            case 12:
-                // === SHOOT 4 (final shot before park) - robot at (48, 96) ===
-                setLeftIntakeState(false);
-                shootAll();
-
-                if (pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS) {
-                    follower.followPath(paths.Park, true);
-                    setPathState(13);
-                }
-                break;
-            case 13:
-                // Driving to park
-                if (!follower.isBusy()) {
-                    setPathState(14);
-                }
-                break;
-            case 14:
-                // Parked - done
-                break;
-        }
+    /**
+     * Advance to the next step (or stay on the last one when done).
+     */
+    private void nextStep() {
+        currentStep = Math.min(currentStep + 1, sequence.size() - 1);
+        stepEntered = false;
+        pathTimer.resetTimer();
     }
 
-    public void setPathState(int newPathState) {
-        pathState = newPathState;
-        pathTimer.resetTimer();
+    /**
+     * Build a step that follows a path at the given max-power, with optional side-effects on enter.
+     */
+    private Step followStep(String name, PathChain path, double maxPower, Runnable onEnterAction) {
+        return new Step() {
+            @Override
+            public void onEnter() {
+                follower.setMaxPower(maxPower);
+                follower.followPath(path, true);
+                if (onEnterAction != null) onEnterAction.run();
+            }
+
+            @Override
+            public boolean isDone() {
+                return !follower.isBusy();
+            }
+
+            @Override
+            public String label() {
+                return name;
+            }
+        };
+    }
+
+    /**
+     * Build a timed wait step (runs onEnterAction once, then waits SHOOT_WAIT_MS).
+     */
+    private Step waitStep(String name, Runnable onEnterAction) {
+        return new Step() {
+            @Override
+            public void onEnter() {
+                if (onEnterAction != null) onEnterAction.run();
+            }
+
+            @Override
+            public boolean isDone() {
+                return pathTimer.getElapsedTimeSeconds() * 1000 > SHOOT_WAIT_MS;
+            }
+
+            @Override
+            public String label() {
+                return name;
+            }
+        };
+    }
+
+    // Sequence definition
+    private void buildSequence() {
+        sequence = new ArrayList<>();
+
+        // Initial shot (balls already loaded)
+        sequence.add(waitStep("Shoot 1", () -> {
+            setLeftIntakeState(false);
+            shootAll();
+        }));
+
+        // Row 1
+        sequence.add(followStep("Setup -> Row 1", paths.ArtifactSetup1, FULL_SPEED, () -> {
+            shutdownFlywheel();
+            setLeftIntakeState(true);
+        }));
+        sequence.add(followStep("Pickup Row 1", paths.ArtifactPickup1, INTAKE_SWEEP_SPEED, null));
+        sequence.add(followStep("Return -> Shoot 2", paths.TravelToShoot1, FULL_SPEED, () -> {
+            ballCount = 3;
+            spinupFlywheel();
+        }));
+        sequence.add(waitStep("Shoot 2", () -> {
+            setLeftIntakeState(false);
+            shootAll();
+        }));
+
+        // Row 2
+        sequence.add(followStep("Setup -> Row 2", paths.ArtifactSetup2, FULL_SPEED, () -> {
+            shutdownFlywheel();
+            setLeftIntakeState(true);
+        }));
+        sequence.add(followStep("Pickup Row 2", paths.ArtifactPickup2, INTAKE_SWEEP_SPEED, null));
+        sequence.add(followStep("Return -> Shoot 3", paths.TravelToShoot2, FULL_SPEED, () -> {
+            ballCount = 3;
+            spinupFlywheel();
+        }));
+        sequence.add(waitStep("Shoot 3", () -> {
+            setLeftIntakeState(false);
+            shootAll();
+        }));
+
+        // Row 3
+        sequence.add(followStep("Setup -> Row 3", paths.ArtifactSetup3, FULL_SPEED, () -> {
+            shutdownFlywheel();
+            setLeftIntakeState(true);
+        }));
+        sequence.add(followStep("Pickup Row 3", paths.ArtifactPickup3, INTAKE_SWEEP_SPEED, null));
+        sequence.add(followStep("Return -> Shoot 4", paths.TravelToShoot3, FULL_SPEED, () -> {
+            ballCount = 3;
+            spinupFlywheel();
+        }));
+        sequence.add(waitStep("Shoot 4", () -> {
+            setLeftIntakeState(false);
+            shootAll();
+        }));
+
+        // Park
+        sequence.add(followStep("Park", paths.Park, FULL_SPEED, null));
+        sequence.add(new Step() {
+            @Override
+            public void onEnter() { /* done, nothing to do */ }
+
+            @Override
+            public boolean isDone() {
+                return false;
+            } // stay here forever
+
+            @Override
+            public String label() {
+                return "Parked";
+            }
+        });
+    }
+
+    public void autonomousPathUpdate() {
+        if (sequence == null || currentStep >= sequence.size()) return;
+
+        Step step = sequence.get(currentStep);
+
+        if (!stepEntered) {
+            step.onEnter();
+            stepEntered = true;
+        }
+
+        if (step.isDone()) {
+            nextStep();
+        }
     }
 
     @Override
@@ -287,12 +309,13 @@ public class BlueAutonomous extends OpMode {
         follower.setStartingPose(new Pose(48.000, 96.000, Math.toRadians(135)));
 
         intakeLeft = hardwareMap.get(DcMotor.class, "intake_left");
-        // intakeRight = hardwareMap.get(DcMotor.class, "intake_right"); // not used in this autonomous mode
+        // intakeRight = hardwareMap.get(DcMotor.class, "intake_right"); // not used
 
         flywheelLeft = hardwareMap.get(DcMotorEx.class, "left_flywheel");
         flywheelRight = hardwareMap.get(DcMotorEx.class, "right_flywheel");
 
         paths = new Paths(follower);
+        buildSequence();
     }
 
     @Override
@@ -303,7 +326,9 @@ public class BlueAutonomous extends OpMode {
     @Override
     public void start() {
         opmodeTimer.resetTimer();
-        setPathState(0);
+        currentStep = 0;
+        stepEntered = false;
+        pathTimer.resetTimer();
     }
 
     @Override
@@ -314,13 +339,18 @@ public class BlueAutonomous extends OpMode {
     @Override
     public void loop() {
         follower.update();
-
         autonomousPathUpdate();
 
-        telemetry.addData("path state", pathState);
+        // Telemetry
+        Step active = (sequence != null && currentStep < sequence.size())
+                ? sequence.get(currentStep) : null;
+        telemetry.addData("step", "%d / %d  -  %s",
+                currentStep + 1, sequence != null ? sequence.size() : 0,
+                active != null ? active.label() : "-");
         telemetry.addData("x", follower.getPose().getX());
         telemetry.addData("y", follower.getPose().getY());
-        telemetry.addData("heading", follower.getPose().getHeading());
+        telemetry.addData("heading", Math.toDegrees(follower.getPose().getHeading()));
+        telemetry.addData("balls", ballCount);
         telemetry.update();
     }
 
@@ -353,16 +383,18 @@ public class BlueAutonomous extends OpMode {
 
     private void shoot() {
         spinupFlywheel();
-
         // TODO: Wait for spin up and activate servo to push ball into flywheel
-
         ballCount -= 1;
     }
 
-    // TODO: Needs to delay between shots
+    // TODO: Delay needs to be re-reviewed
     private void shootAll() {
         while (ballCount > 0) {
             shoot();
+
+            // Sleep for 2s
+
         }
     }
 }
+
